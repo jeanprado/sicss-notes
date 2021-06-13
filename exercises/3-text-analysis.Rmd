@@ -31,11 +31,11 @@ para mais informações, veja o [código anotado](https://sicss.io/2020/material
 
 antes até de começar o pré-processamento, vou remover os links do texto dos tweets. [da primeira vez](https://github.com/jeanprado/sicss-notes/commit/fe9f5ba50b954de0c1b7552b49187637f4a58a11) não fiz isso e em algumas partes da análise apareceu uma sequência de texto aleatório, como `dj1398d928`, que era o final das URLs. mais fácil remover esse tipo de coisa antes de tokenizar o texto (quebrar em palavras únicas).
 
-para remover as URLs do texto, usei uma [regex](https://pt.wikipedia.org/wiki/Express%C3%A3o_regular) que copiei [dessa thread](https://stackoverflow.com/questions/3809401/what-is-a-good-regular-expression-to-match-a-url) no stack overflow. (ninguém é de ferro, né?)
+para remover as URLs do texto, usei uma [regex](https://pt.wikipedia.org/wiki/Express%C3%A3o_regular) que adaptei [dessa thread](https://stackoverflow.com/questions/1400431/regular-expression-match-any-word-until-first-space) no stack overflow. (ninguém é de ferro, né?)
 
 ```{r unnest_tokens}
 tweets <- raw |> 
-  dplyr::mutate(text = stringr::str_remove_all(text, "(https?:\\/\\/)?([\\w\\-])+\\.{1}([a-zA-Z]{2,63})*?([^#\\n\\r]*)?"))
+  dplyr::mutate(text = stringr::str_remove_all(text, "https([^\\s]+)"))
 
 tt <- tweets |> dplyr::select(created_at, text) |> 
   tidytext::unnest_tokens("word", text)
@@ -45,8 +45,9 @@ tt <- tweets |> dplyr::select(created_at, text) |>
 tirando as URLs antes, não precisei adicionar termos como `https`, `t.co` e similares nas stopwords. 😉
 
 ```{r rm_stopwords}
-tt <- tt |> dplyr::filter(!word %in% c(tm::stopwords("pt"),
-                                       "ser", "é", "pra", "sobre", "q", "vai"))
+sw_adicionais <- c("ser", "é", "pra", "sobre", "q", "vai", "estás")
+
+tt <- tt |> dplyr::filter(!word %in% c(tm::stopwords("pt"), sw_adicionais))
 
 tt |> dplyr::count(word, sort=T)
 ```
@@ -89,7 +90,7 @@ tt <- tt |>
 
 ### palavras mais representativas
 
-usando o método de **inverse document frequency (tf-idf)**. a explicação do [@jtrecenti](https://twitter.com/jtrecenti?s=20) nessa [live da curso-r](https://youtu.be/NQwFIZBQrg8) foi a única que me fez entender até agora: a tf-idf encontra as palavras que mais representam um documento (são frequente dentro de um documento e relativamente rara entre os outros documentos).
+usando o método de **inverse document frequency (tf-idf)**. a explicação do [\@jtrecenti](https://twitter.com/jtrecenti?s=20) nessa [live da curso-r](https://youtu.be/NQwFIZBQrg8) foi a única que me fez entender até agora: a tf-idf **encontra as palavras que mais representam um documento** (são frequentes dentro de um documento e relativamente raras entre os outros documentos).
 ```{r create_idf}
 tt_idf <- tt |> dplyr::count(word, created_at) |>
   tidytext::bind_tf_idf(word, created_at, n)
@@ -97,18 +98,33 @@ tt_idf <- tt |> dplyr::count(word, created_at) |>
 tt_idf |> dplyr::arrange(desc(tf_idf))
 ```
 
-suspeito que essas palavras mais raras são na verdade as @s de usuários com poucas interações/tweets sobre amazônia. então, antes de rodar o algoritmo da tf-idf, vou remover as linhas que contém nomes de usuários presentes no dataset.
+hmm, suspeito que essas palavras mais raras são na verdade as @s de usuários com poucas interações/tweets sobre amazônia. então, antes de rodar o algoritmo da tf-idf, vou remover @menções a outros usuários do texto dos tweets usando a regex `@\\W+`:
+  
+  (depois que rodei, vi que pegava algumas hashtags irrelevantes, então vou removê-las também. não seria o padrão para todos os casos -- pode ser desejável identificar hashtags pouco usadas ou que podem ser relevantes em um tópico, mas não é o que quero aqui.)
+
+((outra coisa que fiz aqui foi incluir o `status_id` como identificador no lugar do `created_at`, porque estava dando peso maior a palavras repetidas dentro de um mesmo tweet. na verdade eu só coloquei `created_at` no começo para seguir o autor do exercício.))
 ```{r remake_idf}
-# se existe algum jeito menos burro de combinar múltiplas colunas em um vetor de caracteres, desconheço
+# recria o dataset tidytext (tt) sem considerar @menções a outros usuários
+tt <- tweets |> dplyr::select(user_id, text) |> 
+  dplyr::mutate(text = stringr::str_remove_all(text, "(@|#)\\w+"),
+                dplyr::across(text, stringr::str_squish)) |>
+  tidytext::unnest_tokens("word", text) |> # repetindo o filtro das stopwords
+  dplyr::filter(!word %in% c(tm::stopwords("pt"), sw_adicionais))
+
+# identifica e @ dos usuários que são mencionados no dataset
+# (se existe algum jeito menos burro de combinar múltiplas colunas em um vetor de caracteres, desconheço)
 users <- tweets |> dplyr::select(screen_name, reply_to_screen_name, quoted_screen_name) |>
   tidyr::unite("users", sep = "~") |> tidyr::separate_rows(users, sep = "~") |> 
   dplyr::filter(!users %in% c("NA", "")) |> dplyr::distinct() |> dplyr::pull(users)
 
-tt_idf <- tt |> dplyr::count(word, created_at) |>
+tt_idf <- tt |> dplyr::count(word, user_id) |>
   dplyr::filter(!word %in% users) |> 
-  tidytext::bind_tf_idf(word, created_at, n)
+  tidytext::bind_tf_idf(word, user_id, n)
+
+tt_idf |> dplyr::arrange(desc(tf_idf))
 ```
 
+aiai.
 
 ### cria a document-term matrix
 agora que já temos as palavras tratadas, o último passo antes de estruturar para a análise seria fazer o _stemming_ (reduzir as palavras à forma mais básica). mas tentei aqui (no código abaixo) e não funcionou muito bem no português 😕
@@ -121,8 +137,8 @@ tt |> dplyr::mutate(word = SnowballC::wordStem(words = word, language = "pt")) |
 então vou ser rebelde e fazer a document-term matrix sem o stemming. essa estrutura é útil para a modelagem de tópicos
 
 ```{r create_dtm}
-tt_dtm <- tt |> dplyr::count(created_at, word) |>
-  tidytext::cast_dtm(created_at, word, n)
+tt_dtm <- tt |> dplyr::count(user_id, word) |>
+  tidytext::cast_dtm(user_id, word, n)
 
 tt_dtm
 ```
@@ -132,7 +148,7 @@ tt_dtm
 agora que a diversão começa. usando o pacote `topicmodels` e seguindo as instruções [dessa aula aqui](https://sicss.io/2020/materials/day3-text-analysis/topic-modeling/rmarkdown/Topic_Modeling.html), usando Latent Dirichlet Allocation (LDA)
 
 ```{r lda, fig.width=12, fig.height=7}
-tt_model <- topicmodels::LDA(tt_dtm, k = 9,
+tt_model <- topicmodels::LDA(tt_dtm, k = 6,
                              control = list(seed = 123))
 
 model_topics <- tidytext::tidy(tt_model, matrix = "beta")
@@ -153,6 +169,6 @@ model_top_terms |> dplyr::mutate(term = reorder(term, beta)) |>
 LDA não é a única forma de topic modeling, apesar de ser a mais comum. uma alternativa é a structural topic modeling (STM), que, além de olhar para as palavras, considera metadados aos quais elas estão associadas -- consequentemente, a relação entre esssas variáveis e os tópicos em si.
 
 ainda quero testar com tweets (é possível? quais seriam outras covariáveis? autores? a interação entre os autores? como operacionalizar isso?), então por enquanto deixo algumas referências para se aprofundar:
-
-- [SICSS - Structural Topic Modeling](https://sicss.io/2020/materials/day3-text-analysis/topic-modeling/rmarkdown/Topic_Modeling.html)
+  
+  - [SICSS - Structural Topic Modeling](https://sicss.io/2020/materials/day3-text-analysis/topic-modeling/rmarkdown/Topic_Modeling.html)
 - [Using Structural Topic Modeling to Detect Events and Cluster Twitter Users in the Ukrainian Crisis](https://link.springer.com/chapter/10.1007/978-3-319-21380-4_108)
