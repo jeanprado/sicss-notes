@@ -1,0 +1,20 @@
+---
+title: "bem-vinde!"
+author: "jean prado"
+date: "13 jun. 2021"
+output:
+  html_document:
+    theme: "cosmo"
+    css: "style/custom.css"
+---
+
+## oi!
+
+nesse repositório reuno as anotações (quando as organizar) e alguns exercícios do sicss (summer institute of computational social sciences). até tem apenas o [dia 3 de análise de texto](https://jeanprado.github.io/sicss-notes/exercises/3-text-analysis.html).
+
+alguns links úteis:
+
+- [participantes do sicss edição brasil](https://sicss.io/2021/fgv-dapp-brazil/people)
+- [agenda](https://sicss.io/2021/fgv-dapp-brazil/schedule)
+- [materiais](https://sicss.io/curriculum)
+- [livro bit by bit](https://www.bitbybitbook.com/en/1st-ed/preface/) do matthew salganik
