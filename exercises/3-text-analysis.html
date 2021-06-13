@@ -172,7 +172,7 @@ pre code {
 </div>
 
 
-<p>os exercícios aqui são baseados no <a href="https://github.com/compsocialscience/summer-institute/tree/master/2020/materials/day3-text-analysis">dia 3 do SICSS</a>. <strong>Nota:</strong> nessa análise estou usando a versão nova do pipe (<code>|&gt;</code>, que na <a href="https://github.com/tonsky/FiraCode">fonte do código</a> é mostrada como <code style="font-family: &#39;Fira Code&#39;">|&gt;</code>) no lugar da versão do <code>magrittr</code>, a <code>%&gt;%</code>. para mais informações, veja <a href="https://beatrizmilz.com/blog/2021-05-18-experimentando-o-r-410/">esse post da Bea</a>.</p>
+<p>os exercícios aqui são baseados no <a href="https://github.com/compsocialscience/summer-institute/tree/master/2020/materials/day3-text-analysis">dia 3 do SICSS</a>. <strong>nota:</strong> nessa análise estou usando a versão nova do pipe (<code>|&gt;</code>, que na <a href="https://github.com/tonsky/FiraCode">fonte do código</a> é mostrada como <code style="font-family: &#39;Fira Code&#39;">|&gt;</code>) no lugar da versão do <code>magrittr</code>, a <code>%&gt;%</code>. para mais informações, veja <a href="https://beatrizmilz.com/blog/2021-05-18-experimentando-o-r-410/">esse post da Bea</a>.</p>
 <div id="puxa-dados-do-twitter" class="section level2">
 <h2>puxa dados do Twitter</h2>
 <p>o que será que estão falando da Amazônia? puxei 10 mil tweets com a palavra <strong>amazônia</strong> em português de <strong>4 a 12 de junho</strong>.</p>
@@ -188,10 +188,10 @@ raw &lt;- readRDS(file = &quot;../data-raw/tweets-amazonia.rds&quot;)</code></pr
 <p>para mais informações, veja o <a href="https://sicss.io/2020/materials/day3-text-analysis/basic-text-analysis/rmarkdown/Basic_Text_Analysis_in_R.html">código anotado</a> da aula de pré-processamento.</p>
 <p>antes até de começar o pré-processamento, vou remover os links do texto dos tweets. <a href="https://github.com/jeanprado/sicss-notes/commit/fe9f5ba50b954de0c1b7552b49187637f4a58a11">da primeira vez</a> não fiz isso e em algumas partes da análise apareceu uma sequência de aleatório, como <code>dj1398d928</code>, que era o final das URLs. mais fácil remover esse tipo de coisa antes de tokenizar o texto (quebrar em palavras únicas).</p>
 <p>para remover as URLs do texto, usei uma <a href="https://pt.wikipedia.org/wiki/Express%C3%A3o_regular">regex</a> que copiei dessa thread no stack overflow. (ninguém é de ferro, né?)</p>
-<pre class="r"><code>tweets &lt;- raw |&gt; 
+<pre class="r"><code>tweets &lt;- raw |&gt;
   dplyr::mutate(text = stringr::str_remove_all(text, &quot;(https?:\\/\\/)?([\\w\\-])+\\.{1}([a-zA-Z]{2,63})*?([^#\\n\\r]*)?&quot;))
 
-tt &lt;- tweets |&gt; dplyr::select(created_at, text) |&gt; 
+tt &lt;- tweets |&gt; dplyr::select(created_at, text) |&gt;
   tidytext::unnest_tokens(&quot;word&quot;, text)</code></pre>
 <div id="remove-as-stopwords" class="section level3">
 <h3>remove as stopwords</h3>
@@ -253,8 +253,8 @@ tt |&gt; dplyr::count(word, sort=T)</code></pre>
 ## 10 0,10        1
 ## # ... with 67 more rows</code></pre>
 <p>opa, tem sim, então removendo…</p>
-<pre class="r"><code>tt |&gt; dplyr::filter(stringr::str_detect(word, &quot;\\W&quot;)) |&gt; 
-  dplyr::mutate(word = stringr::str_remove_all(word, &quot;\\W&quot;)) |&gt; 
+<pre class="r"><code>tt |&gt; dplyr::filter(stringr::str_detect(word, &quot;\\W&quot;)) |&gt;
+  dplyr::mutate(word = stringr::str_remove_all(word, &quot;\\W&quot;)) |&gt;
   dplyr::count(word, sort=T)</code></pre>
 <pre><code>## # A tibble: 75 x 2
 ##    word        n
@@ -272,9 +272,9 @@ tt |&gt; dplyr::count(word, sort=T)</code></pre>
 ## # ... with 65 more rows</code></pre>
 <p>epa, pera. percebeu que essa regex removeu também o ponto de números, aí <code>4.0</code> virou <code>40</code>? penso que pode ser um problema na análise, porque não representa exatamente a expressão original. então vou remover todas as pontuações <em>menos</em> as que estão entre números.</p>
 <p>pra isso, fiz a regex <code>^\d+(?:(\.|,)\d+)*$</code> que adaptei <a href="https://stackoverflow.com/questions/27141528/regular-expression-that-allow-dots-between-numbers">daqui</a> pra identificar ponto ou vírgula entre números. no código abaixo, a pontuação só é removida quando esse padrão <strong>não</strong> é identificado.</p>
-<pre class="r"><code>tt |&gt; dplyr::filter(stringr::str_detect(word, &quot;\\W&quot;)) |&gt; 
+<pre class="r"><code>tt |&gt; dplyr::filter(stringr::str_detect(word, &quot;\\W&quot;)) |&gt;
   dplyr::mutate(word = dplyr::if_else(stringr::str_detect(word, &quot;^\\d+(?:(\\.|,)\\d+)*$&quot;), word,
-                                      stringr::str_remove_all(word, &quot;\\W&quot;))) |&gt; 
+                                      stringr::str_remove_all(word, &quot;\\W&quot;))) |&gt;
   dplyr::count(word, sort=T)</code></pre>
 <pre><code>## # A tibble: 75 x 2
 ##    word        n
@@ -319,7 +319,7 @@ tt_idf |&gt; dplyr::arrange(desc(tf_idf))</code></pre>
 <div id="cria-a-document-term-matrix" class="section level3">
 <h3>cria a document-term matrix</h3>
 <p>agora que já temos as palavras tratadas, o último passo antes de estruturar para a análise seria fazer o <em>stemming</em> (reduzir as palavras à forma mais básica). mas tentei aqui (no código abaixo) e não funcionou muito bem no português 😕</p>
-<pre class="r"><code>tt |&gt; dplyr::mutate(word = SnowballC::wordStem(words = word, language = &quot;pt&quot;)) |&gt; 
+<pre class="r"><code>tt |&gt; dplyr::mutate(word = SnowballC::wordStem(words = word, language = &quot;pt&quot;)) |&gt;
   dplyr::count(word, sort=T)</code></pre>
 <pre><code>## # A tibble: 15,580 x 2
 ##    word         n
@@ -354,11 +354,11 @@ tt_dtm</code></pre>
 
 model_topics &lt;- tidytext::tidy(tt_model, matrix = &quot;beta&quot;)
 
-model_top_terms &lt;- model_topics |&gt; dplyr::group_by(topic) |&gt; 
-  dplyr::top_n(10, beta) |&gt; dplyr::ungroup() |&gt; 
+model_top_terms &lt;- model_topics |&gt; dplyr::group_by(topic) |&gt;
+  dplyr::top_n(10, beta) |&gt; dplyr::ungroup() |&gt;
   dplyr::arrange(topic, -beta)
 
-model_top_terms |&gt; dplyr::mutate(term = reorder(term, beta)) |&gt; 
+model_top_terms |&gt; dplyr::mutate(term = reorder(term, beta)) |&gt;
   ggplot2::ggplot(ggplot2::aes(term, beta, fill = factor(topic))) +
   ggplot2::geom_col(show.legend = FALSE) +
   ggplot2::facet_wrap(~ topic, scales = &quot;free&quot;) +

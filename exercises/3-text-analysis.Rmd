@@ -12,7 +12,7 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-os exercícios aqui são baseados no [dia 3 do SICSS](https://github.com/compsocialscience/summer-institute/tree/master/2020/materials/day3-text-analysis). **Nota:** nessa análise estou usando a versão nova do pipe (`|>`, que na [fonte do código](https://github.com/tonsky/FiraCode) é mostrada como <code style="font-family: 'Fira Code'">|></code>) no lugar da versão do `magrittr`, a `%>%`. para mais informações, veja [esse post da Bea](https://beatrizmilz.com/blog/2021-05-18-experimentando-o-r-410/).
+os exercícios aqui são baseados no [dia 3 do SICSS](https://github.com/compsocialscience/summer-institute/tree/master/2020/materials/day3-text-analysis). **nota:** nessa análise estou usando a versão nova do pipe (`|>`, que na [fonte do código](https://github.com/tonsky/FiraCode) é mostrada como <code style="font-family: 'Fira Code'">|></code>) no lugar da versão do `magrittr`, a `%>%`. para mais informações, veja [esse post da Bea](https://beatrizmilz.com/blog/2021-05-18-experimentando-o-r-410/).
 
 ## puxa dados do Twitter
 o que será que estão falando da Amazônia? puxei 10 mil tweets com a palavra **amazônia** em português de **4 a 12 de junho**.
