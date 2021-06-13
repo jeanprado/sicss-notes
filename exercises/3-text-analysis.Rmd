@@ -29,9 +29,9 @@ raw <- readRDS(file = "../data-raw/tweets-amazonia.rds")
 ## pré-processamento
 para mais informações, veja o [código anotado](https://sicss.io/2020/materials/day3-text-analysis/basic-text-analysis/rmarkdown/Basic_Text_Analysis_in_R.html) da aula de pré-processamento.
 
-antes até de começar o pré-processamento, vou remover os links do texto dos tweets. [da primeira vez](https://github.com/jeanprado/sicss-notes/commit/fe9f5ba50b954de0c1b7552b49187637f4a58a11) não fiz isso e em algumas partes da análise apareceu uma sequência de aleatório, como `dj1398d928`, que era o final das URLs. mais fácil remover esse tipo de coisa antes de tokenizar o texto (quebrar em palavras únicas).
+antes até de começar o pré-processamento, vou remover os links do texto dos tweets. [da primeira vez](https://github.com/jeanprado/sicss-notes/commit/fe9f5ba50b954de0c1b7552b49187637f4a58a11) não fiz isso e em algumas partes da análise apareceu uma sequência de texto aleatório, como `dj1398d928`, que era o final das URLs. mais fácil remover esse tipo de coisa antes de tokenizar o texto (quebrar em palavras únicas).
 
-para remover as URLs do texto, usei uma [regex](https://pt.wikipedia.org/wiki/Express%C3%A3o_regular) que copiei dessa thread no stack overflow. (ninguém é de ferro, né?)
+para remover as URLs do texto, usei uma [regex](https://pt.wikipedia.org/wiki/Express%C3%A3o_regular) que copiei [dessa thread](https://stackoverflow.com/questions/3809401/what-is-a-good-regular-expression-to-match-a-url) no stack overflow. (ninguém é de ferro, né?)
 
 ```{r unnest_tokens}
 tweets <- raw |> 
@@ -87,15 +87,28 @@ tt <- tt |>
                                       stringr::str_remove_all(word, "\\W")))
 ```
 
-### palavras incomuns?
+### palavras mais representativas
 
-inverse document frequency: útil para palavras pouco frequentes, mas aqui não mostrou muita coisa
+usando o método de **inverse document frequency (tf-idf)**. a explicação do [@jtrecenti](https://twitter.com/jtrecenti?s=20) nessa [live da curso-r](https://youtu.be/NQwFIZBQrg8) foi a única que me fez entender até agora: a tf-idf encontra as palavras que mais representam um documento (são frequente dentro de um documento e relativamente rara entre os outros documentos).
 ```{r create_idf}
 tt_idf <- tt |> dplyr::count(word, created_at) |>
   tidytext::bind_tf_idf(word, created_at, n)
 
 tt_idf |> dplyr::arrange(desc(tf_idf))
 ```
+
+suspeito que essas palavras mais raras são na verdade as @s de usuários com poucas interações/tweets sobre amazônia. então, antes de rodar o algoritmo da tf-idf, vou remover as linhas que contém nomes de usuários presentes no dataset.
+```{r remake_idf}
+# se existe algum jeito menos burro de combinar múltiplas colunas em um vetor de caracteres, desconheço
+users <- tweets |> dplyr::select(screen_name, reply_to_screen_name, quoted_screen_name) |>
+  tidyr::unite("users", sep = "~") |> tidyr::separate_rows(users, sep = "~") |> 
+  dplyr::filter(!users %in% c("NA", "")) |> dplyr::distinct() |> dplyr::pull(users)
+
+tt_idf <- tt |> dplyr::count(word, created_at) |>
+  dplyr::filter(!word %in% users) |> 
+  tidytext::bind_tf_idf(word, created_at, n)
+```
+
 
 ### cria a document-term matrix
 agora que já temos as palavras tratadas, o último passo antes de estruturar para a análise seria fazer o _stemming_ (reduzir as palavras à forma mais básica). mas tentei aqui (no código abaixo) e não funcionou muito bem no português 😕
