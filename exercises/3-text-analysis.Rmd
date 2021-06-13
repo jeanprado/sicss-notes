@@ -19,9 +19,9 @@ o que será que estão falando da Amazônia? puxei 10 mil tweets com a palavra *
 
 ```{r import}
 #do not run - tweets already saved at data-raw/tweets-amazonia.rds
-# raw <- rtweet::search_tweets(q = "amazônia lang:pt", n = 10000,
+# raw <- rtweet::search_tweets(q = "amazônia lang:pt", n = 18000,
 #                       include_rts = FALSE, type = "mixed")
-# raw |> saveRDS(file = "data-raw/tweets-amazonia.rds")
+# raw |> saveRDS(file = "../data-raw/tweets-amazonia.rds")
 
 raw <- readRDS(file = "../data-raw/tweets-amazonia.rds")
 ```
@@ -29,16 +29,24 @@ raw <- readRDS(file = "../data-raw/tweets-amazonia.rds")
 ## pré-processamento
 para mais informações, veja o [código anotado](https://sicss.io/2020/materials/day3-text-analysis/basic-text-analysis/rmarkdown/Basic_Text_Analysis_in_R.html) da aula de pré-processamento.
 
+antes até de começar o pré-processamento, vou remover os links do texto dos tweets. [da primeira vez](https://github.com/jeanprado/sicss-notes/commit/fe9f5ba50b954de0c1b7552b49187637f4a58a11) não fiz isso e em algumas partes da análise apareceu uma sequência de aleatório, como `dj1398d928`, que era o final das URLs. mais fácil remover esse tipo de coisa antes de tokenizar o texto (quebrar em palavras únicas).
+
+para remover as URLs do texto, usei uma [regex](https://pt.wikipedia.org/wiki/Express%C3%A3o_regular) que copiei dessa thread no stack overflow. (ninguém é de ferro, né?)
+
 ```{r unnest_tokens}
-tt <- raw |> dplyr::select(created_at, text) |> 
+tweets <- raw |> 
+  dplyr::mutate(text = stringr::str_remove_all(text, "(https?:\\/\\/)?([\\w\\-])+\\.{1}([a-zA-Z]{2,63})*?([^#\\n\\r]*)?"))
+
+tt <- tweets |> dplyr::select(created_at, text) |> 
   tidytext::unnest_tokens("word", text)
 ```
 
 ### remove as stopwords
+tirando as URLs antes, não precisei adicionar termos como `https`, `t.co` e similares nas stopwords. 😉
+
 ```{r rm_stopwords}
 tt <- tt |> dplyr::filter(!word %in% c(tm::stopwords("pt"),
-                                       "t.co", "https", "rt", "amp", "ser",
-                                       "é", "pra", "sobre", "q", "vai"))
+                                       "ser", "é", "pra", "sobre", "q", "vai"))
 
 tt |> dplyr::count(word, sort=T)
 ```
@@ -65,7 +73,7 @@ tt |> dplyr::filter(stringr::str_detect(word, "\\W")) |>
   dplyr::count(word, sort=T)
 ```
 
-epa, pera. percebeu que essa expressão removeu também o ponto de números, aí `4.0` virou `40`? penso que pode ser um problema na análise, porque não representa exatamente. então vou remover todas as pontuações *menos* as que estão entre números.
+epa, pera. percebeu que essa regex removeu também o ponto de números, aí `4.0` virou `40`? penso que pode ser um problema na análise, porque não representa exatamente a expressão original. então vou remover todas as pontuações *menos* as que estão entre números.
 
 pra isso, fiz a regex `^\d+(?:(\.|,)\d+)*$` que adaptei [daqui](https://stackoverflow.com/questions/27141528/regular-expression-that-allow-dots-between-numbers) pra identificar ponto ou vírgula entre números. no código abaixo, a pontuação só é removida quando esse padrão **não** é identificado.
 ```{r rm_non_word_2}
@@ -131,7 +139,7 @@ model_top_terms |> dplyr::mutate(term = reorder(term, beta)) |>
 
 LDA não é a única forma de topic modeling, apesar de ser a mais comum. uma alternativa é a structural topic modeling (STM), que, além de olhar para as palavras, considera metadados aos quais elas estão associadas -- consequentemente, a relação entre esssas variáveis e os tópicos em si.
 
-ainda quero testar com tweets (é possível? quais seriam outras covariáveis? autores? a interação entre os autores? como operacionalizar isso?), então por enquanto deixo algumas 
+ainda quero testar com tweets (é possível? quais seriam outras covariáveis? autores? a interação entre os autores? como operacionalizar isso?), então por enquanto deixo algumas referências para se aprofundar:
 
 - [SICSS - Structural Topic Modeling](https://sicss.io/2020/materials/day3-text-analysis/topic-modeling/rmarkdown/Topic_Modeling.html)
 - [Using Structural Topic Modeling to Detect Events and Cluster Twitter Users in the Ukrainian Crisis](https://link.springer.com/chapter/10.1007/978-3-319-21380-4_108)
