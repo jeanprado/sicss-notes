@@ -104,21 +104,14 @@ hmm, suspeito que essas palavras mais raras são na verdade as @s de usuários c
 
 ((outra coisa que fiz aqui foi incluir o `status_id` como identificador no lugar do `created_at`, porque estava dando peso maior a palavras repetidas dentro de um mesmo tweet. na verdade eu só coloquei `created_at` no começo para seguir o autor do exercício.))
 ```{r remake_idf}
-# recria o dataset tidytext (tt) sem considerar @menções a outros usuários
+# recria o dataset tidytext (tt) sem considerar @menções e #hashtags
 tt <- tweets |> dplyr::select(user_id, text) |> 
   dplyr::mutate(text = stringr::str_remove_all(text, "(@|#)\\w+"),
                 dplyr::across(text, stringr::str_squish)) |>
   tidytext::unnest_tokens("word", text) |> # repetindo o filtro das stopwords
   dplyr::filter(!word %in% c(tm::stopwords("pt"), sw_adicionais))
 
-# identifica e @ dos usuários que são mencionados no dataset
-# (se existe algum jeito menos burro de combinar múltiplas colunas em um vetor de caracteres, desconheço)
-users <- tweets |> dplyr::select(screen_name, reply_to_screen_name, quoted_screen_name) |>
-  tidyr::unite("users", sep = "~") |> tidyr::separate_rows(users, sep = "~") |> 
-  dplyr::filter(!users %in% c("NA", "")) |> dplyr::distinct() |> dplyr::pull(users)
-
 tt_idf <- tt |> dplyr::count(word, user_id) |>
-  dplyr::filter(!word %in% users) |> 
   tidytext::bind_tf_idf(word, user_id, n)
 
 tt_idf |> dplyr::arrange(desc(tf_idf))
@@ -145,10 +138,17 @@ tt_dtm
 
 ### modelagem de tópicos com LDA
 
-agora que a diversão começa. usando o pacote `topicmodels` e seguindo as instruções [dessa aula aqui](https://sicss.io/2020/materials/day3-text-analysis/topic-modeling/rmarkdown/Topic_Modeling.html), usando Latent Dirichlet Allocation (LDA)
+agora que a diversão começa. usando o pacote `topicmodels` e seguindo as instruções [dessa aula aqui](https://sicss.io/2020/materials/day3-text-analysis/topic-modeling/rmarkdown/Topic_Modeling.html), usando Latent Dirichlet Allocation 
 
+(depois que rodei o modelo, além de mudar o valor de `k` repetidas vezes, vi que talvez seja frutífero remover a palavra `amazônia` antes da criação do `dtm`, já que ela é comum a todos os grupos -- é dela que puxamos os tweets)
+
+(a regex `amaz[ôóo]nia` filtra essas 3 versões: amazônia, amazónia e amazonia)
 ```{r lda, fig.width=12, fig.height=7}
-tt_model <- topicmodels::LDA(tt_dtm, k = 6,
+tt_dtm <- tt |> dplyr::count(user_id, word) |>
+  dplyr::filter(!stringr::str_detect(word, "amaz[ôóo]nia")) |> 
+  tidytext::cast_dtm(user_id, word, n)
+
+tt_model <- topicmodels::LDA(tt_dtm, k = 9,
                              control = list(seed = 123))
 
 model_topics <- tidytext::tidy(tt_model, matrix = "beta")
