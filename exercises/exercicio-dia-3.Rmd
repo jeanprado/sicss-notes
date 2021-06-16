@@ -1,0 +1,131 @@
+---
+title: "análise de texto - dia 3"
+author: "jean prado"
+date: "16 jun. 2021"
+output:
+  html_document:
+    theme: "cosmo"
+    css: "../style/custom.css"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+diferente do post sobre text analysis, essa é a execução do exercício do dia 3 da sicss-fgv dappp brasil com dados do youtube.
+
+```{r import}
+raw <- readxl::read_excel("../data-raw/youtube-database-day4.xlsx")
+```
+
+## pré-processamento
+para mais informações, veja o [código anotado](https://sicss.io/2020/materials/day3-text-analysis/basic-text-analysis/rmarkdown/Basic_Text_Analysis_in_R.html) da aula de pré-processamento.
+
+```{r unnest_tokens}
+# remove urls
+
+tweets <- raw %>%
+  dplyr::mutate(text = stringr::str_remove_all(text, "https([^\\s]+)"))
+
+tt <- tweets %>% dplyr::select(created_at, text) %>%
+  tidytext::unnest_tokens("word", text)
+```
+
+```{r rm_stopwords}
+# remove stopwords
+
+sw_adicionais <- c("ser", "é", "pra", "sobre", "q", "vai", "estás")
+
+tt <- tt %>% dplyr::filter(!word %in% c(tm::stopwords("pt"), sw_adicionais))
+
+tt %>% dplyr::count(word, sort=T)
+```
+
+```{r}
+# tem acentos?
+
+tt %>% dplyr::filter(stringr::str_detect(word, "[À-ú]")) %>% dplyr::count(word, sort=T)
+```
+
+```{r check_non_word}
+# tem pontuação/caracacteres especiais?
+
+tt %>% dplyr::filter(stringr::str_detect(word, "\\W")) %>% dplyr::count(word, sort=T)
+```
+
+
+```{r rm_non_word}
+# remover caracteres especiais, menos ponto no meio de dígito
+
+tt %>% dplyr::filter(stringr::str_detect(word, "\\W")) %>%
+  dplyr::mutate(word = dplyr::if_else(stringr::str_detect(word, "^\\d+(?:(\\.|,)\\d+)*$"), word,
+                                      stringr::str_remove_all(word, "\\W"))) %>%
+  dplyr::count(word, sort=T)
+
+tt <- tt %>%
+  dplyr::mutate(word = dplyr::if_else(stringr::str_detect(word, "^\\d+(?:(\\.|,)\\d+)*$"), word,
+                                      stringr::str_remove_all(word, "\\W")))
+```
+
+```{r create_idf}
+# palavras mais representativas
+
+tt_idf <- tt %>% dplyr::count(word, created_at) %>%
+  tidytext::bind_tf_idf(word, created_at, n)
+
+tt_idf %>% dplyr::arrange(desc(tf_idf))
+```
+
+```{r remake_idf}
+# recria o dataset tidytext (tt) sem considerar @menções e #hashtags
+
+tt <- tweets %>% dplyr::select(user_id, text) %>%
+  dplyr::mutate(text = stringr::str_remove_all(text, "(@|#)\\w+"),
+                dplyr::across(text, stringr::str_squish)) %>%
+  tidytext::unnest_tokens("word", text) %>% # repetindo o filtro das stopwords
+  dplyr::filter(!word %in% c(tm::stopwords("pt"), sw_adicionais))
+
+tt_idf <- tt %>% dplyr::count(word, user_id) %>%
+  tidytext::bind_tf_idf(word, user_id, n)
+
+tt_idf %>% dplyr::arrange(desc(tf_idf))
+```
+
+```{r stemming}
+tt %>% dplyr::mutate(word = SnowballC::wordStem(words = word, language = "pt")) %>%
+  dplyr::count(word, sort=T)
+```
+
+```{r create_dtm}
+dtm
+tt_dtm <- tt %>% dplyr::count(user_id, word) %>%
+  tidytext::cast_dtm(user_id, word, n)
+
+tt_dtm
+```
+
+### modelagem de tópicos com LDA
+
+```{r lda, fig.width=12, fig.height=7}
+tt_dtm <- tt %>% dplyr::count(user_id, word) %>%
+  dplyr::filter(!stringr::str_detect(word, "amaz[ôóo]nia"),
+                !word == "gt") %>%
+  tidytext::cast_dtm(user_id, word, n)
+
+tt_model <- topicmodels::LDA(tt_dtm, k = 11,
+                             control = list(seed = 123))
+
+model_topics <- tidytext::tidy(tt_model, matrix = "beta")
+
+model_top_terms <- model_topics %>% dplyr::group_by(topic) %>%
+  dplyr::top_n(10, beta) %>% dplyr::ungroup() %>%
+  dplyr::arrange(topic, -beta)
+
+model_top_terms %>% dplyr::mutate(term = reorder(term, beta)) %>%
+  ggplot2::ggplot(ggplot2::aes(term, beta, fill = factor(topic))) +
+  ggplot2::geom_col(show.legend = FALSE) +
+  ggplot2::facet_wrap(~ topic, scales = "free") +
+  ggplot2::coord_flip()
+```
+
+### e mais
